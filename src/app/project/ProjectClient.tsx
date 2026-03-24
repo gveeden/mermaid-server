@@ -1,19 +1,21 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { useSearchParams, notFound } from 'next/navigation';
 import MermaidEditor from '@/components/MermaidEditor';
 import MermaidDiagram from '@/components/MermaidDiagram';
-import { Download, FileImage, FileCode, FileText, Check, Save, Loader2 } from 'lucide-react';
+import { Download, FileImage, FileCode, FileText, Check, Save, Loader2, Menu } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
-import { Project } from '@/db/schema';
+import { Project, images } from '@/db/schema';
 import { getProject, updateProject } from '@/lib/client-actions';
 import { useDatabase } from '@/components/DatabaseProvider';
+import { useLayout } from '@/components/AppLayout';
 
-export default function ProjectClient() {
+function ProjectClientContent() {
   const searchParams = useSearchParams();
   const idParam = searchParams.get('id');
   const { db, isReady, save, refresh } = useDatabase();
+  const { toggleSidebar } = useLayout();
   
   const [project, setProject] = useState<Project | null>(null);
   const [code, setCode] = useState('');
@@ -96,9 +98,10 @@ export default function ProjectClient() {
           reader.readAsDataURL(blob);
         });
         
-        img.setAttribute('src', base64);
+        const imgElement = img as HTMLImageElement;
+        imgElement.setAttribute('src', base64);
         // Clean up metadata
-        img.removeAttribute('data-image-id');
+        imgElement.removeAttribute('data-image-id');
       }
     }
 
@@ -158,16 +161,22 @@ export default function ProjectClient() {
   return (
     <div className="flex flex-col h-full bg-gray-50 overflow-hidden font-sans">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
-        <div className="flex items-center gap-4 flex-1">
-          <FileCode className="w-6 h-6 text-blue-600 flex-shrink-0" />
+      <header className="flex items-center justify-between px-4 lg:px-6 py-3 bg-white border-b border-gray-200">
+        <div className="flex items-center gap-3 lg:gap-4 flex-1 min-w-0">
+          <button 
+            onClick={toggleSidebar}
+            className="p-2 -ml-2 hover:bg-gray-100 rounded-md lg:hidden text-gray-600"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <FileCode className="w-5 h-5 lg:w-6 lg:h-6 text-blue-600 flex-shrink-0" />
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-xl font-bold text-gray-800 bg-transparent border-none focus:outline-none focus:ring-b-2 focus:ring-blue-500 w-full max-w-md"
+            className="text-lg lg:text-xl font-bold text-gray-800 bg-transparent border-none focus:outline-none focus:ring-b-2 focus:ring-blue-500 w-full max-w-md truncate"
             placeholder="Untitled Diagram"
           />
-          <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
+          <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400 font-medium">
             {isSaving ? (
               <span className="flex items-center gap-1">
                 <Save className="w-3 h-3 animate-spin" /> Saving...
@@ -180,35 +189,38 @@ export default function ProjectClient() {
           </div>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-1 lg:gap-2">
           <button 
             onClick={downloadSVG}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-2 lg:px-4 py-1.5 lg:py-2 text-xs lg:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            title="Download SVG"
           >
-            <Download className="w-4 h-4" />
-            SVG
+            <Download className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden md:inline">SVG</span>
           </button>
           <button 
             onClick={downloadPNG}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-2 lg:px-4 py-1.5 lg:py-2 text-xs lg:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            title="Download PNG"
           >
-            <FileImage className="w-4 h-4" />
-            PNG
+            <FileImage className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden md:inline">PNG</span>
           </button>
           <button 
             onClick={downloadJPEG}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-2 lg:px-4 py-1.5 lg:py-2 text-xs lg:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            title="Download JPEG"
           >
-            <FileText className="w-4 h-4" />
-            JPEG
+            <FileText className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden md:inline">JPEG</span>
           </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
         {/* Editor Area */}
-        <div className="w-1/2 h-full p-4 border-r border-gray-200">
+        <div className="w-full lg:w-1/2 h-[400px] lg:h-full p-2 lg:p-4 border-b lg:border-b-0 lg:border-r border-gray-200">
           <MermaidEditor 
             code={code} 
             onChange={setCode} 
@@ -217,15 +229,28 @@ export default function ProjectClient() {
         </div>
 
         {/* Preview Area */}
-        <div className="w-1/2 h-full p-8 bg-gray-100 overflow-auto flex items-center justify-center">
+        <div className="w-full lg:w-1/2 min-h-[400px] lg:h-full p-4 lg:p-8 bg-gray-100 flex items-center justify-center">
           <div 
             ref={diagramRef} 
-            className="bg-white p-8 rounded-lg shadow-xl border border-gray-200 min-h-[300px] min-w-[300px] flex items-center justify-center transition-all duration-300 hover:shadow-2xl overflow-visible"
+            className="bg-white p-4 lg:p-8 rounded-lg shadow-xl border border-gray-200 min-h-[300px] min-w-[300px] max-w-full flex items-center justify-center transition-all duration-300 hover:shadow-2xl overflow-visible"
           >
              <MermaidDiagram code={code} className="max-w-full" />
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProjectClient() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-2" />
+        <p className="text-gray-500 text-sm">Initializing...</p>
+      </div>
+    }>
+      <ProjectClientContent />
+    </Suspense>
   );
 }

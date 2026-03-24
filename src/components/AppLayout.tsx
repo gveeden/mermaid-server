@@ -1,17 +1,39 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, createContext, useContext } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { useDatabase } from './DatabaseProvider';
 import { getProjects } from '@/lib/client-actions';
 import { getImages } from '@/lib/client-image-actions';
 import { Project } from '@/db/schema';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Menu, X } from 'lucide-react';
+
+interface LayoutContextType {
+  isSidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
+}
+
+const LayoutContext = createContext<LayoutContextType | null>(null);
+
+export function useLayout() {
+  const context = useContext(LayoutContext);
+  if (!context) throw new Error('useLayout must be used within AppLayout');
+  return context;
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { db, isReady, version } = useDatabase();
   const [projects, setProjects] = useState<Project[]>([]);
   const [images, setImages] = useState<any[]>([]);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+  // Initialize sidebar state based on screen size
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSidebarOpen(window.innerWidth >= 1024);
+    }
+  }, []);
 
   useEffect(() => {
     if (isReady && db) {
@@ -27,6 +49,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isReady, db, version]);
 
+  const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
+
   if (!isReady) {
     return (
       <div className="h-screen w-screen bg-gray-900 flex flex-col items-center justify-center gap-4">
@@ -40,11 +64,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="h-full flex bg-gray-900 text-gray-100 overflow-hidden">
-      <Sidebar initialProjects={projects} initialImages={images} />
-      <main className="flex-1 h-full overflow-hidden bg-white text-gray-900 relative">
-        {children}
-      </main>
-    </div>
+    <LayoutContext.Provider value={{ isSidebarOpen, setSidebarOpen, toggleSidebar }}>
+      <div className="h-full flex bg-gray-900 text-gray-100 overflow-hidden relative">
+        {/* Sidebar overlay for mobile */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        
+        <div className={`
+          fixed inset-y-0 left-0 z-30 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
+        `}>
+          <Sidebar initialProjects={projects} initialImages={images} />
+        </div>
+
+        <main className="flex-1 h-full overflow-hidden bg-white text-gray-900 relative">
+          {children}
+        </main>
+      </div>
+    </LayoutContext.Provider>
   );
 }
