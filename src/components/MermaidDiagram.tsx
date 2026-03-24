@@ -23,6 +23,10 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code, className }) => {
       startOnLoad: false,
       theme: 'default',
       securityLevel: 'loose',
+      // Ensure mermaid doesn't try to fit to a small container by default
+      flowchart: { useMaxWidth: false },
+      sequence: { useMaxWidth: false },
+      gantt: { useMaxWidth: false },
     });
   }, []);
 
@@ -85,10 +89,10 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code, className }) => {
   }, [code, isReady, db]);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-auto p-4">
+    <div className={`relative flex items-center justify-center ${className}`}>
       <div
         ref={containerRef}
-        className={`mermaid-diagram ${className} ${error ? 'opacity-0 pointer-events-none absolute' : 'opacity-100'}`}
+        className={`mermaid-diagram ${error ? 'opacity-0 pointer-events-none absolute' : 'opacity-100'}`}
         dangerouslySetInnerHTML={{ __html: svg }}
       />
       {error && (
