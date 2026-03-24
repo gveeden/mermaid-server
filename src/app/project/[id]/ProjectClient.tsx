@@ -6,7 +6,8 @@ import MermaidDiagram from '@/components/MermaidDiagram';
 import { Download, FileImage, FileCode, FileText, Check, Save } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import { Project } from '@/db/schema';
-import { updateProject } from '@/lib/actions';
+import { updateProject } from '@/lib/client-actions';
+import { useDatabase } from '@/components/DatabaseProvider';
 
 interface ProjectClientProps {
   initialProject: Project;
@@ -17,22 +18,35 @@ export default function ProjectClient({ initialProject }: ProjectClientProps) {
   const [title, setTitle] = useState(initialProject.title);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const { db, save, refresh } = useDatabase();
   
   const diagramRef = useRef<HTMLDivElement>(null);
+
+  // Sync state if initialProject changes (e.g. navigation)
+  useEffect(() => {
+    setCode(initialProject.code);
+    setTitle(initialProject.title);
+  }, [initialProject.id, initialProject.code, initialProject.title]);
 
   // Autosave logic
   useEffect(() => {
     const timer = setTimeout(async () => {
+      if (!db) return;
       if (code !== initialProject.code || title !== initialProject.title) {
         setIsSaving(true);
-        await updateProject(initialProject.id, { code, title });
-        setIsSaving(false);
+        await updateProject(db, initialProject.id, { code, title });
+        await save();
         setLastSaved(new Date());
+        setIsSaving(false);
+        // Refresh sidebar title if title changed
+        if (title !== initialProject.title) {
+          refresh();
+        }
       }
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [code, title, initialProject.id, initialProject.code, initialProject.title]);
+  }, [code, title, initialProject.id, initialProject.code, initialProject.title, db]);
 
   const downloadSVG = () => {
     if (!diagramRef.current) return;

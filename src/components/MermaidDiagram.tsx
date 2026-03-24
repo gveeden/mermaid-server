@@ -2,6 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
+import { useDatabase } from './DatabaseProvider';
+import { images } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 interface MermaidDiagramProps {
   code: string;
@@ -12,6 +15,8 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const { db, isReady } = useDatabase();
+  const blobUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
     mermaid.initialize({
@@ -19,6 +24,14 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code, className }) => {
       theme: 'default',
       securityLevel: 'loose',
     });
+  }, []);
+
+  // Cleanup blob URLs to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      blobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      blobUrlsRef.current = [];
+    };
   }, []);
 
   useEffect(() => {
@@ -29,22 +42,47 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code, className }) => {
         return;
       }
 
-      if (!containerRef.current) return;
+      if (!containerRef.current || !isReady || !db) return;
 
       try {
         const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-        const { svg } = await mermaid.render(id, code);
-        setSvg(svg);
+        const { svg: renderedSvg } = await mermaid.render(id, code);
+        
+        // Post-process SVG to replace /api/image/ID with local Blobs
+        let finalSvg = renderedSvg;
+        const imgRegex = /src=['"]\/api\/image\/(\d+)['"]/g;
+        let match;
+        const replacements: Record<string, string> = {};
+
+        while ((match = imgRegex.exec(renderedSvg)) !== null) {
+          const imageId = parseInt(match[1]);
+          const imageRecord = await db.query.images.findFirst({
+            where: eq(images.id, imageId),
+          });
+
+          if (imageRecord) {
+            const blob = new Blob([imageRecord.data as any], { type: imageRecord.contentType });
+            const blobUrl = URL.createObjectURL(blob);
+            blobUrlsRef.current.push(blobUrl);
+            replacements[match[0]] = `src="${blobUrl}"`;
+          }
+        }
+
+        for (const [oldTag, newTag] of Object.entries(replacements)) {
+          finalSvg = finalSvg.replaceAll(oldTag, newTag);
+        }
+
+        setSvg(finalSvg);
         setError(null);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Mermaid render error:', err);
-        setError('Invalid Mermaid syntax');
-        setSvg(''); // Clear the last valid SVG
+        setError(err.message || 'Invalid Mermaid syntax');
+        setSvg(''); 
       }
     };
 
     renderDiagram();
-  }, [code]);
+  }, [code, isReady, db]);
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-auto p-4">

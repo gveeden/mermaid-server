@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { Plus, Trash2, FileCode, Folder, Image as ImageIcon } from 'lucide-react';
-import { createProject, deleteProject } from '@/lib/actions';
+import { useParams, useRouter } from 'next/navigation';
+import { Plus, Trash2, FileCode, Folder, Image as ImageIcon, Download, Upload as UploadIcon, Database } from 'lucide-react';
+import { createProject, deleteProject } from '@/lib/client-actions';
 import { Project } from '@/db/schema';
 import ImageGallery from './ImageGallery';
+import { useDatabase } from './DatabaseProvider';
+import { saveDBBinary } from '@/lib/db-browser';
 
 interface SidebarProps {
   initialProjects: Project[];
@@ -19,8 +21,58 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => {
   const params = useParams();
+  const router = useRouter();
   const currentId = params.id ? parseInt(params.id as string) : null;
   const [activeTab, setActiveTab] = useState<'projects' | 'images'>('projects');
+  const { db, sqlite, refresh, save } = useDatabase();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateProject = async () => {
+    if (!db) return;
+    const project = await createProject(db);
+    await save();
+    refresh();
+    router.push(`/project/${project.id}`);
+  };
+
+  const handleDeleteProject = async (id: number) => {
+    if (!db) return;
+    if (confirm('Delete this project?')) {
+      await deleteProject(db, id);
+      await save();
+      refresh();
+      if (currentId === id) {
+        router.push('/');
+      }
+    }
+  };
+
+  const downloadBackup = () => {
+    if (!sqlite) return;
+    const data = sqlite.export();
+    const blob = new Blob([data as any], { type: 'application/x-sqlite3' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mermaid_backup_${new Date().toISOString().split('T')[0]}.db`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const arrayBuffer = reader.result as ArrayBuffer;
+      const uint8Array = new Uint8Array(arrayBuffer);
+      await saveDBBinary(uint8Array);
+      // Hard refresh to reload the DB from IndexedDB
+      window.location.reload();
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
   return (
     <div className="w-64 h-screen bg-gray-900 border-r border-gray-800 flex flex-col">
@@ -55,7 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => 
           <>
             <div className="p-4 border-b border-gray-800">
               <button
-                onClick={() => createProject()}
+                onClick={handleCreateProject}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium shadow-lg shadow-blue-900/20"
               >
                 <Plus className="w-4 h-4" />
@@ -84,9 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => 
                   <button
                     onClick={(e) => {
                       e.preventDefault();
-                      if (confirm('Delete this project?')) {
-                        deleteProject(project.id);
-                      }
+                      handleDeleteProject(project.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-900/30 hover:text-red-400 rounded transition-all"
                   >
@@ -107,11 +157,39 @@ const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => 
         )}
       </div>
 
+      {/* Backup & Restore */}
+      <div className="p-2 border-t border-gray-800 bg-gray-950/20 grid grid-cols-2 gap-2">
+        <button
+          onClick={downloadBackup}
+          className="flex items-center justify-center gap-1.5 py-2 px-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-md transition-all text-[10px] font-bold uppercase"
+          title="Download Backup"
+        >
+          <Download className="w-3 h-3" />
+          Backup
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center justify-center gap-1.5 py-2 px-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-md transition-all text-[10px] font-bold uppercase"
+          title="Restore Backup"
+        >
+          <UploadIcon className="w-3 h-3" />
+          Restore
+        </button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleRestore}
+          className="hidden"
+          accept=".db,application/x-sqlite3"
+        />
+      </div>
+
       <div className="p-4 border-t border-gray-800 bg-gray-950/50">
         <div className="flex items-center gap-2 px-2 py-1">
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-          <span className="text-[10px] text-gray-500 font-mono uppercase tracking-tighter">
-            Cloud Persistence Active
+          <span className="text-[10px] text-gray-500 font-mono uppercase tracking-tighter flex items-center gap-1">
+            <Database className="w-2 h-2" />
+            Wasm Persistence Active
           </span>
         </div>
       </div>
