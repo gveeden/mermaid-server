@@ -35,6 +35,27 @@ function ProjectClientContent() {
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
+  const viewStates = useRef<Record<string, { zoom: number, pan: {x: number, y: number} }>>({});
+
+  useEffect(() => {
+    if (idParam) {
+      const saved = viewStates.current[idParam];
+      if (saved) {
+        setZoom(saved.zoom);
+        setPan(saved.pan);
+      } else {
+        setZoom(1.0);
+        setPan({ x: 0, y: 0 });
+      }
+    }
+  }, [idParam]);
+
+  useEffect(() => {
+    if (idParam) {
+      viewStates.current[idParam] = { zoom, pan };
+    }
+  }, [zoom, pan, idParam]);
+
   const diagramRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
@@ -83,10 +104,7 @@ function ProjectClientContent() {
   // --- PAN & ZOOM LOGIC ---
 
   const handleZoom = useCallback((delta: number) => {
-    setZoom(prev => {
-      const newZoom = Math.min(Math.max(prev + delta, 0.1), 10);
-      return parseFloat(newZoom.toFixed(2));
-    });
+    setZoom(prev => Math.min(Math.max(prev + delta, 0.1), 10));
   }, []);
 
   const resetView = useCallback(() => {
@@ -110,7 +128,7 @@ function ProjectClientContent() {
 
     container.addEventListener('wheel', onWheel, { passive: false });
     return () => container.removeEventListener('wheel', onWheel);
-  }, [handleZoom]);
+  }, [handleZoom, project, loading]);
 
   // Dragging Handlers
   const handleMouseDown = (e: React.MouseEvent) => {
