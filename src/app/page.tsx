@@ -16,7 +16,7 @@ export default function Home() {
       const checkProjects = async () => {
         const projects = await getProjects(db);
         if (projects.length > 0) {
-          router.replace(`/project/${projects[0].id}`);
+          router.replace(`/project?id=${projects[0].id}`);
         } else {
           setLoading(false);
         }
@@ -30,7 +30,7 @@ export default function Home() {
     const project = await createProject(db);
     await save();
     refresh();
-    router.push(`/project/${project.id}`);
+    router.push(`/project?id=${project.id}`);
   };
 
   if (!isReady || loading) {

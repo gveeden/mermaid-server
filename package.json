@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "deploy": "next build && firebase deploy --only hosting"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.1",
+    "firebase": "^12.11.0",
     "html-to-image": "^1.11.11",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^1.6.0",

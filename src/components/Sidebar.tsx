@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Trash2, FileCode, Folder, Image as ImageIcon, Download, Upload as UploadIcon, Database } from 'lucide-react';
 import { createProject, deleteProject } from '@/lib/client-actions';
 import { Project } from '@/db/schema';
@@ -20,9 +20,9 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => {
-  const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const currentId = params.id ? parseInt(params.id as string) : null;
+  const currentId = searchParams.get('id') ? parseInt(searchParams.get('id') as string) : null;
   const [activeTab, setActiveTab] = useState<'projects' | 'images'>('projects');
   const { db, sqlite, refresh, save } = useDatabase();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => 
     const project = await createProject(db);
     await save();
     refresh();
-    router.push(`/project/${project.id}`);
+    router.push(`/project?id=${project.id}`);
   };
 
   const handleDeleteProject = async (id: number) => {
@@ -126,7 +126,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialProjects, initialImages }) => 
                   }`}
                 >
                   <Link
-                    href={`/project/${project.id}`}
+                    href={`/project?id=${project.id}`}
                     className="flex-1 flex items-center gap-2 truncate text-sm"
                   >
                     <FileCode className={`w-4 h-4 flex-shrink-0 ${currentId === project.id ? 'text-blue-400' : 'text-gray-500'}`} />

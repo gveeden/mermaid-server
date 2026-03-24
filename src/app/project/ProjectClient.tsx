@@ -1,59 +1,108 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams, notFound } from 'next/navigation';
 import MermaidEditor from '@/components/MermaidEditor';
 import MermaidDiagram from '@/components/MermaidDiagram';
-import { Download, FileImage, FileCode, FileText, Check, Save } from 'lucide-react';
+import { Download, FileImage, FileCode, FileText, Check, Save, Loader2 } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import { Project } from '@/db/schema';
-import { updateProject } from '@/lib/client-actions';
+import { getProject, updateProject } from '@/lib/client-actions';
 import { useDatabase } from '@/components/DatabaseProvider';
 
-interface ProjectClientProps {
-  initialProject: Project;
-}
-
-export default function ProjectClient({ initialProject }: ProjectClientProps) {
-  const [code, setCode] = useState(initialProject.code);
-  const [title, setTitle] = useState(initialProject.title);
+export default function ProjectClient() {
+  const searchParams = useSearchParams();
+  const idParam = searchParams.get('id');
+  const { db, isReady, save, refresh } = useDatabase();
+  
+  const [project, setProject] = useState<Project | null>(null);
+  const [code, setCode] = useState('');
+  const [title, setTitle] = useState('');
+  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const { db, save, refresh } = useDatabase();
   
   const diagramRef = useRef<HTMLDivElement>(null);
 
-  // Sync state if initialProject changes (e.g. navigation)
+  // Initial Fetch
   useEffect(() => {
-    setCode(initialProject.code);
-    setTitle(initialProject.title);
-  }, [initialProject.id, initialProject.code, initialProject.title]);
+    if (isReady && db && idParam) {
+      const fetchProject = async () => {
+        setLoading(true);
+        const projectId = parseInt(idParam as string);
+        if (isNaN(projectId)) {
+          setLoading(false);
+          return;
+        }
+        const p = await getProject(db, projectId);
+        if (p) {
+          setProject(p);
+          setCode(p.code);
+          setTitle(p.title);
+        }
+        setLoading(false);
+      };
+      fetchProject();
+    }
+  }, [isReady, db, idParam]);
 
   // Autosave logic
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (!db) return;
-      if (code !== initialProject.code || title !== initialProject.title) {
+      if (!db || !project) return;
+      if (code !== project.code || title !== project.title) {
         setIsSaving(true);
-        await updateProject(db, initialProject.id, { code, title });
+        await updateProject(db, project.id, { code, title });
         await save();
         setLastSaved(new Date());
         setIsSaving(false);
+        // Update local project reference to avoid re-triggering
+        setProject({ ...project, code, title });
         // Refresh sidebar title if title changed
-        if (title !== initialProject.title) {
+        if (title !== project.title) {
           refresh();
         }
       }
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [code, title, initialProject.id, initialProject.code, initialProject.title, db]);
+  }, [code, title, project, db, save, refresh]);
 
-  const downloadSVG = () => {
-    if (!diagramRef.current) return;
+  const downloadSVG = async () => {
+    if (!diagramRef.current || !db) return;
     const svgElement = diagramRef.current.querySelector('svg');
     if (!svgElement) return;
 
-    const svgData = new XMLSerializer().serializeToString(svgElement);
+    // Clone SVG to avoid modifying the live preview
+    const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+    
+    // Find all images with our custom metadata
+    const imgs = Array.from(clonedSvg.querySelectorAll('img[data-image-id]'));
+    
+    for (const img of imgs) {
+      const imageId = parseInt(img.getAttribute('data-image-id') || '');
+      if (isNaN(imageId)) continue;
+      
+      const imageRecord = await db.query.images.findFirst({
+        where: (images, { eq }) => eq(images.id, imageId),
+      });
+
+      if (imageRecord) {
+        // Convert to Base64 using FileReader
+        const blob = new Blob([imageRecord.data as any], { type: imageRecord.contentType });
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+        
+        img.setAttribute('src', base64);
+        // Clean up metadata
+        img.removeAttribute('data-image-id');
+      }
+    }
+
+    const svgData = new XMLSerializer().serializeToString(clonedSvg);
     const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
     const link = document.createElement('a');
@@ -91,8 +140,23 @@ export default function ProjectClient({ initialProject }: ProjectClientProps) {
     }
   };
 
+  if (!isReady || (loading && idParam)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-50">
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-2" />
+        <p className="text-gray-500 text-sm">Loading project...</p>
+      </div>
+    );
+  }
+
+  if (!project && !loading) {
+    notFound();
+  }
+
+  if (!project) return null;
+
   return (
-    <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-full bg-gray-50 overflow-hidden font-sans">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
         <div className="flex items-center gap-4 flex-1">

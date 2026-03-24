@@ -64,7 +64,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ code, className }) => {
             const blob = new Blob([imageRecord.data as any], { type: imageRecord.contentType });
             const blobUrl = URL.createObjectURL(blob);
             blobUrlsRef.current.push(blobUrl);
-            replacements[match[0]] = `src="${blobUrl}"`;
+            replacements[match[0]] = `src="${blobUrl}" data-image-id="${imageId}"`;
           }
         }
 
